@@ -1,0 +1,269 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# MANDATORY GAME ARCHITECTURE - NO DEVIATIONS ALLOWED
+
+This game has an **EXTREMELY SIMPLE** architecture that is **FINAL AND NON-NEGOTIABLE**. Every modification must follow this exact structure. No exceptions.
+
+If a new feature is added it needs to also have this file be modified to explain what it it does.
+
+## CORE ARCHITECTURE PRINCIPLES
+
+**ABSOLUTE RULE**: This is a text-command driven simulation game where:
+1. Web browser clients connect via WebSocket to a server
+2. Users enter commands as text (no verification needed)
+3. Character ID and World ID are stored in localStorage
+4. Server passes commands + character memories to Gemini LLM
+5. LLM makes decisions in {functionCall, parameters} format
+6. Server executes decisions by creating events
+7. All clients in world receive events in real-time
+8. Events are compiled into character memories
+
+## MANDATORY FOLDER STRUCTURE - DO NOT DEVIATE
+
+```
+/shared/                    # SINGLE source of truth - NO DUPLICATES
+  └── types.ts             # ALL interfaces - client & server import from here
+
+/server/src/
+  ├── database.ts          # PostgreSQL ONLY - entities, events, memories
+  ├── config.ts            # Environment variables
+  ├── eventHandlers/       # ONE FILE PER ACTION TYPE - NEVER COMBINE
+  │   ├── moveEventHandler.ts      # Movement decisions only
+  │   ├── speakEventHandler.ts     # Speech + hearing events
+  │   ├── pickupEventHandler.ts    # Item pickup only
+  │   ├── dropEventHandler.ts      # Item dropping only
+  │   └── index.ts                 # Export all handlers
+  ├── services/
+  │   ├── memoryService.ts         # Memory compilation & retrieval
+  │   └── llmService.ts           # Gemini AI integration
+  ├── websocketServer.ts   # Real-time client communication
+  ├── gameEngine.ts        # Core game logic coordination
+  └── index.ts             # Server entry point
+
+/client/src/
+  ├── services/
+  │   ├── websocketService.ts      # Server communication
+  │   ├── assetService.ts          # 3D model loading
+  │   └── localStorageService.ts   # Character persistence
+  ├── components/          # React UI components
+  ├── renderers/           # 3D world display
+  └── utils/               # Helper functions
+
+/client/assets/            # 3D models, textures - NEVER in database
+```
+
+## LOCALHOST DEVELOPMENT MENU - DEVELOPMENT ONLY
+
+**MANDATORY RULE**: A development menu MUST appear ONLY when `window.location.hostname === 'localhost'`
+
+### DEVELOPMENT MENU ARCHITECTURE
+
+The development menu provides testing utilities that NEVER appear in production:
+
+```
+/client/src/
+  ├── components/
+  │   ├── DevMenu.tsx             # Main development menu component
+  │   ├── ScriptSelector.tsx      # Script selection dropdown
+  │   └── DevTools.tsx           # Container for all dev features
+  ├── services/
+  │   ├── scriptService.ts        # Manages test scripts
+  │   └── devEnvironmentService.ts # Localhost detection
+  └── scripts/                    # Test script definitions
+      ├── testScripts.ts          # Script definitions and configurations
+      └── index.ts                # Export all scripts
+```
+
+### SCRIPT SYSTEM - REQUIRED IMPLEMENTATION
+
+**TEST SCRIPTS** are collections of commands that auto-execute on page load for testing:
+
+```typescript
+interface TestScript {
+  id: string;
+  name: string;
+  description: string;
+  commands: string[];
+  delayBetweenCommands: number; // milliseconds
+}
+```
+
+### SCRIPT EXECUTION FLOW - MANDATORY
+
+1. User selects script from development menu
+2. Script ID stored in localStorage as `selectedTestScript`
+3. On page load, if script ID exists and hostname is localhost:
+   - Load script definition from `testScripts.ts`
+   - Execute commands sequentially with specified delays
+   - Send each command via existing chat interface
+   - Clear script from localStorage after execution
+
+### DEVELOPMENT MENU FEATURES - EXTENSIBLE
+
+**CORE FEATURES** (implement immediately):
+- Script selector dropdown with all available test scripts
+- "Execute Script" button to run selected script
+- "Clear Script" button to remove auto-execution
+- Script description display
+
+**FUTURE FEATURES** (can be added later):
+- Memory viewer for current character
+- World state inspector
+- Event log viewer
+- Performance metrics
+- Character position teleporter
+
+### LOCALHOST DETECTION - STRICT RULE
+
+Development menu MUST only render when:
+```typescript
+const isLocalhost = window.location.hostname === 'localhost';
+```
+
+**NO DEVELOPMENT FEATURES IN PRODUCTION** - This is non-negotiable.
+
+### SCRIPT STORAGE - SIMPLE IMPLEMENTATION
+
+Scripts are stored as static definitions in `/client/src/scripts/testScripts.ts`:
+```typescript
+export const testScripts: TestScript[] = [
+  {
+    id: 'basic-movement',
+    name: 'Basic Movement Test',
+    description: 'Test character movement commands',
+    commands: ['move to the forest', 'look around', 'move back to town'],
+    delayBetweenCommands: 2000
+  },
+  {
+    id: 'conversation-test',
+    name: 'Conversation Test',
+    description: 'Test speaking and interaction',
+    commands: ['say hello world', 'say how is everyone doing?'],
+    delayBetweenCommands: 3000
+  }
+];
+```
+
+### UI INTEGRATION - OVERLAY PATTERN
+
+Development menu appears as an overlay that:
+- Positions in top-right corner of screen
+- Can be collapsed/expanded with toggle button
+- Doesn't interfere with main game interface
+- Uses distinct styling to indicate development-only feature
+
+## MANDATORY EVENT STRUCTURE - NEVER CHANGE
+
+**ALL events MUST follow this EXACT format:**
+```typescript
+{
+  functionCall: "move" | "speak" | "pickup" | "drop" | "heard",
+  parameters: {
+    entityId: string,
+    worldId: string,
+    // action-specific parameters
+  },
+  timestamp: Date
+}
+```
+
+## DECISION TYPES - ONLY THESE FOUR
+
+1. **"move"** - Move to coordinates
+2. **"speak"** - Say something (creates heard events for nearby entities)
+3. **"pickup"** - Take an item
+4. **"drop"** - Drop an item
+
+**NO OTHER DECISION TYPES ALLOWED**
+
+## WORLD ISOLATION - MANDATORY
+
+- Each world has unique `worldId`
+- All database queries MUST filter by `worldId`
+- Characters can move between worlds
+- Memories are world-specific
+- Events only affect entities in same world
+
+## MEMORY SYSTEM - REQUIRED IMPLEMENTATION
+
+- Events compile into character memories
+- Memories stored in PostgreSQL with importance scores
+- Retrieved for LLM context (max 15 memories)
+- Formatted as text for Gemini input
+
+## ASSET MANAGEMENT - FIXED RULES
+
+- 3D models stored in `/client/assets/` ONLY
+- Never store assets in database
+- AssetService loads on-demand
+- Support .glb models with textures
+- Manifest-based discovery
+
+## DATABASE SCHEMA - EXACT STRUCTURE REQUIRED
+
+```sql
+entities: id, name, world_id, position_x/y/z, body_parts[], items[]
+events: id, function_call, parameters (JSONB), timestamp
+character_memories: id, character_id, world_id, memory_text, importance_score, timestamp, related_event_ids[]
+```
+
+## CHARACTER SYSTEM - NON-NEGOTIABLE
+
+- Characters are formless entities with coordinates only
+- Body parts, clothes, items are attached assets that follow coordinates
+- No verification needed for character IDs
+- Personalities generated by LLM
+- Memories influence all decisions
+
+## COMMUNICATION FLOW - MANDATORY SEQUENCE
+
+1. User types command in client
+2. Client sends via WebSocket: `{type: "command", entityId, worldId, data: {command}}`
+3. Server gets character memories from database
+4. Server sends command + memories to Gemini LLM
+5. LLM returns decision: `{functionCall: "move|speak|pickup|drop", parameters: {...}}`
+6. Server routes to appropriate event handler
+7. Event handler executes decision, creates events, updates database
+8. Events sent to all clients in world via WebSocket
+9. Clients animate events in real-time
+
+## VIBE CODING RULES - STRICTLY ENFORCED
+
+1. **Single Responsibility**: Each file does ONE thing only
+2. **Clear Naming**: File names must indicate exact purpose
+3. **No Duplication**: All types come from `/shared/types.ts`
+4. **Event Handlers**: Never combine actions in same file
+5. **Service Pattern**: Clean separation always
+6. **Database Centralized**: Only database.ts touches PostgreSQL
+7. **Asset Files**: Never store asset data in database
+
+## FORBIDDEN MODIFICATIONS
+
+- ❌ Changing event structure
+- ❌ Adding new decision types without approval
+- ❌ Storing assets in database
+- ❌ Duplicating types between client/server
+- ❌ Combining event handlers
+- ❌ Breaking world isolation
+- ❌ Changing memory system structure
+- ❌ Modifying core communication flow
+
+## WHEN TO MODIFY
+
+**ONLY modify existing files for:**
+- Changing LLM prompts in `llmService.ts`
+- Adjusting memory compilation in `memoryService.ts`
+- Adding UI components in `/client/src/components/`
+- Modifying 3D rendering logic
+
+**CREATE new files ONLY for:**
+- New React components
+- New utility functions
+- Additional 3D renderers
+
+**This architecture is FINAL. Follow it exactly or risk breaking the entire system.**
+
+
