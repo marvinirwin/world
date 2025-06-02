@@ -57,6 +57,9 @@ export class GameWebSocketServer {
       case 'command':
         await this.handleCommand(ws, message);
         break;
+      case 'devCommand':
+        await this.handleDevCommand(ws, message);
+        break;
       default:
         this.sendToClient(ws, {
           type: 'error',
@@ -126,12 +129,8 @@ export class GameWebSocketServer {
         gameState
       );
 
-      // Add all resulting events to the game engine
-      for (const event of events) {
-        await this.gameEngine.addEvent(event);
-        // Broadcast each event to all clients
-        this.broadcastEvent(event);
-      }
+      // Process all resulting events
+      await this.processEvents(events);
 
       console.log(`Processed command "${message.data.command}" from ${entityId}, generated ${events.length} events`);
     } catch (error) {
@@ -140,6 +139,99 @@ export class GameWebSocketServer {
         type: 'error',
         data: { message: 'Failed to process command' }
       });
+    }
+  }
+
+  private async handleDevCommand(ws: WebSocket, message: ClientMessage): Promise<void> {
+    // Only allow dev commands in development
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    if (!isDevelopment) {
+      this.sendToClient(ws, {
+        type: 'error',
+        data: { message: 'Development commands not allowed in production' }
+      });
+      return;
+    }
+
+    if (!message.data?.command) {
+      this.sendToClient(ws, {
+        type: 'error',
+        data: { message: 'Dev command required' }
+      });
+      return;
+    }
+
+    try {
+      const { command, characterId } = message.data;
+
+      switch (command) {
+        case 'deleteCharacter':
+          if (!characterId) {
+            this.sendToClient(ws, {
+              type: 'error',
+              data: { message: 'Character ID required for deletion' }
+            });
+            return;
+          }
+
+          await this.gameEngine.getDatabaseConnection().deleteCharacter(characterId);
+          
+          // Refresh game state for all clients
+          this.broadcastGameState();
+          
+          this.sendToClient(ws, {
+            type: 'gameState',
+            data: { message: `Character ${characterId} deleted successfully` }
+          });
+          
+          console.log(`DEV: Character ${characterId} deleted`);
+          break;
+          
+        default:
+          this.sendToClient(ws, {
+            type: 'error',
+            data: { message: `Unknown dev command: ${command}` }
+          });
+      }
+    } catch (error) {
+      console.error('Error processing dev command:', error);
+      this.sendToClient(ws, {
+        type: 'error',
+        data: { message: 'Failed to process dev command' }
+      });
+    }
+  }
+
+  // New method to handle events from both user commands and game engine
+  public async processGameEngineEvent(event: GameEvent): Promise<void> {
+    // Process event through command handler to generate secondary events
+    const secondaryEvents = await this.commandHandler.handleEvent(event);
+    
+    // Add the original event to the game engine and broadcast it
+    await this.gameEngine.addEvent(event);
+    this.broadcastEvent(event);
+    
+    // Process any secondary events
+    await this.processEvents(secondaryEvents);
+  }
+
+  private async processEvents(events: GameEvent[]): Promise<void> {
+    const allEvents: GameEvent[] = [];
+    const eventsToProcess = [...events];
+
+    while (eventsToProcess.length > 0) {
+      const event = eventsToProcess.shift()!;
+      allEvents.push(event);
+
+      // Add event to game engine and broadcast
+      await this.gameEngine.addEvent(event);
+      this.broadcastEvent(event);
+
+      // Process the event through command handler to generate any secondary events
+      const secondaryEvents = await this.commandHandler.handleEvent(event);
+      
+      // Add secondary events to the processing queue
+      eventsToProcess.push(...secondaryEvents);
     }
   }
 

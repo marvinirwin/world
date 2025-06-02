@@ -28,7 +28,7 @@ const ScriptSelector: React.FC<ScriptSelectorProps> = ({
     <div style={{ marginBottom: '12px' }}>
       <div style={{ 
         marginBottom: '8px',
-        fontSize: '12px',
+        fontSize: '16px',
         color: '#ffcc99',
         fontWeight: 'bold'
       }}>
@@ -50,7 +50,7 @@ const ScriptSelector: React.FC<ScriptSelectorProps> = ({
               color: 'white',
               border: '1px solid #555',
               borderRadius: '4px',
-              fontSize: '11px',
+              fontSize: '15px',
               cursor: 'pointer',
               textAlign: 'left',
               transition: 'background-color 0.2s'
@@ -69,7 +69,7 @@ const ScriptSelector: React.FC<ScriptSelectorProps> = ({
             <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
               {script.name}
             </div>
-            <div style={{ fontSize: '9px', color: '#ccc', lineHeight: '1.2' }}>
+            <div style={{ fontSize: '13px', color: '#ccc', lineHeight: '1.2' }}>
               {script.description}
             </div>
           </button>
@@ -86,7 +86,7 @@ const ScriptSelector: React.FC<ScriptSelectorProps> = ({
           color: 'white',
           border: 'none',
           borderRadius: '4px',
-          fontSize: '11px',
+          fontSize: '15px',
           cursor: 'pointer'
         }}
       >
@@ -101,7 +101,7 @@ const ScriptSelector: React.FC<ScriptSelectorProps> = ({
           backgroundColor: 'rgba(76, 175, 80, 0.2)', 
           border: '1px solid #4CAF50',
           borderRadius: '4px',
-          fontSize: '10px',
+          fontSize: '14px',
           color: '#4CAF50'
         }}>
           Selected: {selectedScript.name}

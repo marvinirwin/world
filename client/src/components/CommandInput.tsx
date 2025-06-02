@@ -113,7 +113,7 @@ const CommandInput: React.FC<CommandInputProps> = ({
           padding: '10px',
           backgroundColor: 'rgba(255, 255, 255, 0.1)',
           borderRadius: '5px',
-          fontSize: '12px',
+          fontSize: '20px',
           color: '#fff'
         }}
       >
@@ -142,7 +142,7 @@ const CommandInput: React.FC<CommandInputProps> = ({
                 opacity: Math.max(0.3, 1 - (index * 0.05))
               }}
             >
-              <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '10px' }}>
+              <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px' }}>
                 {new Date(event.timestamp).toLocaleTimeString()}
               </span>
               <br />

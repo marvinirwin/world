@@ -138,7 +138,7 @@ export interface LLMDecision {
 }
 
 export interface ClientMessage {
-  type: 'join' | 'command';
+  type: 'join' | 'command' | 'devCommand';
   entityId?: string;
   worldId?: string;
   data?: any;

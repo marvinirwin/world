@@ -70,6 +70,13 @@ export class WebSocketService {
     });
   }
 
+  sendDevCommand(command: string, data: any = {}): void {
+    this.sendMessage({
+      type: 'devCommand',
+      data: { command, ...data }
+    });
+  }
+
   on(eventType: string, callback: Function): void {
     if (!this.eventListeners.has(eventType)) {
       this.eventListeners.set(eventType, []);

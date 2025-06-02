@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ScriptSelector from './ScriptSelector';
+import CharacterDeleter from './CharacterDeleter';
 import { 
   getAvailableScripts, 
   getSelectedScriptId, 
@@ -9,12 +10,15 @@ import {
   executeScript
 } from '../services/scriptService';
 import { TestScript } from '../scripts';
+import { GameState } from '../../../shared/types';
 
 interface DevMenuProps {
   sendCommand: (instruction: string) => void;
+  sendDevCommand?: (command: string, data: any) => void;
+  gameState?: GameState | null;
 }
 
-const DevMenu: React.FC<DevMenuProps> = ({ sendCommand }) => {
+const DevMenu: React.FC<DevMenuProps> = ({ sendCommand, sendDevCommand, gameState }) => {
   const [scripts] = useState<TestScript[]>(getAvailableScripts());
   const [selectedScriptId, setSelectedScriptIdState] = useState<string | null>(null);
 
@@ -42,6 +46,12 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand }) => {
     clearSelectedScript();
   };
 
+  const handleDeleteCharacter = (characterId: string) => {
+    if (sendDevCommand) {
+      sendDevCommand('deleteCharacter', { characterId });
+    }
+  };
+
   return (
     <div style={{
       position: 'fixed',
@@ -52,8 +62,8 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand }) => {
       border: '2px solid #ff6600',
       borderRadius: '8px',
       padding: '12px',
-      minWidth: '250px',
-      maxWidth: '300px',
+      minWidth: '350px',
+      maxWidth: '400px',
       fontFamily: 'monospace',
       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
     }}>
@@ -67,7 +77,7 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand }) => {
         <div style={{
           color: '#ff6600',
           fontWeight: 'bold',
-          fontSize: '14px'
+          fontSize: '18px'
         }}>
           DEV TOOLS
         </div>
@@ -77,7 +87,7 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand }) => {
       <div>
         <div style={{
           color: '#ffcc99',
-          fontSize: '10px',
+          fontSize: '14px',
           marginBottom: '12px',
           fontStyle: 'italic'
         }}>
@@ -92,6 +102,14 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand }) => {
           onClearScript={handleClearScript}
         />
 
+        {/* Character Management */}
+        {sendDevCommand && gameState && (
+          <CharacterDeleter
+            entities={gameState.entities}
+            onDeleteCharacter={handleDeleteCharacter}
+          />
+        )}
+
         {/* Future features placeholder */}
         <div style={{
           borderTop: '1px solid #333',
@@ -100,14 +118,14 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand }) => {
         }}>
           <div style={{
             color: '#666',
-            fontSize: '10px',
+            fontSize: '14px',
             marginBottom: '4px'
           }}>
             Future Features:
           </div>
           <div style={{
             color: '#444',
-            fontSize: '9px',
+            fontSize: '13px',
             lineHeight: '1.3'
           }}>
             • Memory Viewer<br/>

@@ -8,7 +8,7 @@ import {
   handleSpeakEvent, 
   handlePickupEvent, 
   handleDropEvent,
-  handleCheckTasksEvent 
+  handleCheckTasksEvent
 } from './eventHandlers/index.js';
 
 export class CommandHandler {

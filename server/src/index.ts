@@ -21,10 +21,12 @@ async function startServer() {
 
     // Initialize game engine
     const gameEngine = new GameEngine(database);
-    await gameEngine.initialize();
-
+    
     // Start WebSocket server with command handler
     const wsServer = new GameWebSocketServer(config.WS_PORT, gameEngine, commandHandler);
+    
+    // Initialize game engine with websocket server's event processor
+    await gameEngine.initialize((event) => wsServer.processGameEngineEvent(event));
 
     // Graceful shutdown
     process.on('SIGINT', async () => {

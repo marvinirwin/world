@@ -136,6 +136,16 @@ export const useWebSocket = (entityId: string | null) => {
     }
   }, [entityId, gameState?.worldId]);
 
+  const sendDevCommand = useCallback((command: string, data: any = {}) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const message: ClientMessage = {
+        type: 'devCommand',
+        data: { command, ...data }
+      };
+      wsRef.current.send(JSON.stringify(message));
+    }
+  }, []);
+
   useEffect(() => {
     if (entityId) {
       connect();
@@ -152,6 +162,7 @@ export const useWebSocket = (entityId: string | null) => {
     error,
     sendAction,
     sendCommand,
+    sendDevCommand,
     disconnect
   };
 }; 

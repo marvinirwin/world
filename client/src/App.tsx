@@ -19,7 +19,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const { gameState, connected, error, sendAction, sendCommand } = useWebSocket(entityId);
+  const { gameState, connected, error, sendAction, sendCommand, sendDevCommand } = useWebSocket(entityId);
 
   // Auto-execute script on page load (localhost only)
   useEffect(() => {
@@ -77,7 +77,11 @@ const App: React.FC = () => {
 
       {/* Development Menu (localhost only) */}
       {isDevelopmentMode() && gameState && (
-        <DevMenu sendCommand={sendCommand} />
+        <DevMenu 
+          sendCommand={sendCommand} 
+          sendDevCommand={sendDevCommand}
+          gameState={gameState}
+        />
       )}
 
       {/* Logout Button */}

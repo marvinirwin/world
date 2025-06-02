@@ -8,6 +8,7 @@ export class GameEngine {
   private gameState: GameState;
   private worldId: string;
   private cronjobService: CronjobService;
+  private eventProcessor?: (event: GameEvent) => Promise<void>;
 
   constructor(database: Database, worldId: string = 'default') {
     this.database = database;
@@ -20,16 +21,27 @@ export class GameEngine {
     };
   }
 
-  async initialize(): Promise<void> {
+  async initialize(eventProcessor?: (event: GameEvent) => Promise<void>): Promise<void> {
+    this.eventProcessor = eventProcessor;
     await this.loadGameState();
     
     // Start the periodic task checking system
     this.cronjobService.startPeriodicTaskChecking(
       this.worldId,
-      (event: GameEvent) => this.addEvent(event)
+      (event: GameEvent) => this.handlePeriodicEvent(event)
     );
     
     console.log(`Game engine initialized for world: ${this.worldId}`);
+  }
+
+  private async handlePeriodicEvent(event: GameEvent): Promise<void> {
+    if (this.eventProcessor) {
+      // Use the event processor (websocket server) for proper event handling
+      await this.eventProcessor(event);
+    } else {
+      // Fallback to direct addition
+      await this.addEvent(event);
+    }
   }
 
   private async loadGameState(): Promise<void> {
@@ -89,6 +101,10 @@ export class GameEngine {
       entities: { ...this.gameState.entities },
       recentEvents: [...this.gameState.recentEvents]
     };
+  }
+
+  getDatabaseConnection(): Database {
+    return this.database;
   }
 
   async addEvent(event: GameEvent): Promise<void> {

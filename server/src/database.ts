@@ -561,7 +561,9 @@ Then restart the server.
       [cronjobId]
     );
     
-    if (result.rows.length === 0) return null;
+    if (result.rows.length === 0) {
+      return null;
+    }
     
     const row = result.rows[0];
     return {
@@ -575,6 +577,48 @@ Then restart the server.
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
+  }
+
+  async deleteCharacter(characterId: string): Promise<void> {
+    const client = await this.pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Delete character memories
+      await client.query(
+        'DELETE FROM character_memories WHERE character_id = $1',
+        [characterId]
+      );
+      
+      // Delete character cronjobs
+      await client.query(
+        'DELETE FROM character_cronjobs WHERE character_id = $1',
+        [characterId]
+      );
+      
+      // Delete item instances (will be cascaded when entity is deleted due to foreign key)
+      // But we'll be explicit for clarity
+      await client.query(
+        'DELETE FROM item_instances WHERE entity_id = $1',
+        [characterId]
+      );
+      
+      // Delete the entity itself
+      await client.query(
+        'DELETE FROM entities WHERE id = $1',
+        [characterId]
+      );
+      
+      await client.query('COMMIT');
+      console.log(`Character ${characterId} and all related data deleted successfully`);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error deleting character:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async close(): Promise<void> {
