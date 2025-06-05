@@ -168,7 +168,7 @@ const CommandInput: React.FC<CommandInputProps> = ({
       case 'drop':
         return `${event.parameters.entityId} dropped ${event.parameters.itemId}`;
       case 'checkTasks':
-        return `${event.parameters.entityId} checked tasks`;
+        return `${event.parameters.entityId} checked for interactions`;
       default:
         return `${event.parameters.entityId}: ${event.functionCall}`;
     }

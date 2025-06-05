@@ -266,4 +266,110 @@ character_memories: id, character_id, world_id, memory_text, importance_score, t
 
 **This architecture is FINAL. Follow it exactly or risk breaking the entire system.**
 
+Never add any fallback systems with conditionals, you have control over all the code, you know what format your data is.
 
+## CURRENT IMPLEMENTATION STATUS - EXTENSIONS & CLARIFICATIONS
+
+### ✅ APPROVED EXTENSIONS - These Do Not Violate Core Architecture
+
+The following features have been added as **extensions** that build upon the core architecture without breaking it:
+
+#### **Cronjob System - Automated Character Tasks**
+- **Purpose**: Allows characters to have recurring automated behaviors
+- **Files**: `CharacterCronjob` interface, `CheckTasksEvent`, `cronjobService.ts`, `checkTasksEventHandler.ts`
+- **Implementation**: Adds `checkTasks` as an additional decision type beyond the core 4
+- **Database**: Adds `character_cronjobs` table with task scheduling
+- **Justification**: Enhances character autonomy without changing core event flow
+
+#### **Error Handling System - Development & Debugging**
+- **Purpose**: Comprehensive error tracking and debugging capabilities
+- **Files**: `CharacterErrorEvent`, `errorService.ts`
+- **Implementation**: Adds `characterError` event type for error propagation
+- **Database**: Error events stored alongside regular events
+- **Justification**: Essential for debugging without affecting core game mechanics
+
+#### **Enhanced Item System - ItemInstance Objects**
+- **Purpose**: Rich item management with positioning and descriptions
+- **Files**: `ItemInstance` interface in `/shared/types.ts`
+- **Implementation**: Replaces simple `string[]` items with `ItemInstance[]` objects
+- **Database**: Items stored as JSONB with `{id, assetId, description, relativePosition}`
+- **Justification**: Enables 3D positioning and detailed item management
+
+#### **Development Command System - Testing Utilities**
+- **Purpose**: Enhanced development tools beyond basic script execution
+- **Files**: Additional dev components, enhanced dev commands
+- **Implementation**: Extends development menu with advanced testing features
+- **Database**: No database impact, localhost-only features
+- **Justification**: Improves development workflow without production impact
+
+#### **User Command Events - Command Tracking**
+- **Purpose**: Track all user inputs for debugging and analytics
+- **Files**: `UserCommandEvent` interface
+- **Implementation**: Adds `userCommand` event type for command logging
+- **Database**: Command events stored for analysis
+- **Justification**: Debugging aid that doesn't affect core game logic
+
+### ⚠️ IMPLEMENTATION REQUIREMENTS - Must Be Verified
+
+The following aspects need verification to ensure full compliance:
+
+#### **Database Schema Compliance**
+- **Status**: REQUIRES VERIFICATION
+- **Need**: Confirm PostgreSQL tables match exact schema requirements
+- **Tables to verify**: `entities`, `events`, `character_memories`, `character_cronjobs`
+- **Critical**: Ensure `world_id` filtering is implemented everywhere
+- **Action**: Run schema validation against required structure
+
+#### **LLM Integration Compliance**
+- **Status**: REQUIRES VERIFICATION  
+- **Need**: Confirm `llmService.ts` uses Gemini AI properly
+- **Requirements**: Proper API integration, correct prompt formatting, decision parsing
+- **Critical**: Ensure LLM returns `{functionCall, parameters}` format exactly
+- **Action**: Test LLM service integration and response handling
+
+#### **Memory System Compliance**
+- **Status**: REQUIRES VERIFICATION
+- **Need**: Confirm importance scoring and memory compilation work correctly
+- **Requirements**: 15-memory limit, proper importance scoring, text formatting for Gemini
+- **Critical**: Ensure memories influence LLM decisions effectively
+- **Action**: Test memory retrieval and compilation logic
+
+#### **Asset Management Compliance**
+- **Status**: INCOMPLETE
+- **Need**: Populate `/client/assets/` with 3D models
+- **Requirements**: .glb models with textures, manifest-based discovery
+- **Critical**: Ensure no asset data in database, only file references
+- **Action**: Add 3D model files and implement asset loading
+
+### 🔧 EXTENSION GUIDELINES - For Future Development
+
+When adding new features, follow these extension patterns:
+
+#### **Approved Extension Patterns**:
+1. **New Event Types**: Add to event handlers, update types, don't break core 4 decisions
+2. **Enhanced Services**: Add new services in `/services/` directory
+3. **Development Tools**: Add to dev menu, localhost-only features
+4. **Database Extensions**: Add new tables, maintain world isolation
+5. **Enhanced Interfaces**: Extend existing interfaces, don't break compatibility
+
+#### **Forbidden Extension Patterns**:
+1. **Core Architecture Changes**: Never modify fundamental communication flow
+2. **Event Structure Changes**: Never alter `{functionCall, parameters, timestamp}` format
+3. **Type Duplication**: Never create duplicate interfaces outside `/shared/types.ts`
+4. **World Isolation Breaks**: Never allow cross-world data leakage
+5. **Production Dev Features**: Never show development tools in production
+
+### 📋 VERIFICATION CHECKLIST - Implementation Compliance
+
+Before considering the implementation complete, verify:
+
+- [ ] **Database Schema**: All tables match required structure exactly
+- [ ] **LLM Integration**: Gemini AI working with correct prompt/response format
+- [ ] **Memory System**: Importance scoring and 15-memory limit working
+- [ ] **Asset Loading**: 3D models loading from `/client/assets/` properly
+- [ ] **World Isolation**: All queries filter by `worldId` correctly
+- [ ] **Event Structure**: All events follow exact `{functionCall, parameters, timestamp}` format
+- [ ] **Development Menu**: Only appears on localhost, all features working
+- [ ] **Type Centralization**: All types imported from `/shared/types.ts` only
+
+**This extension documentation ensures the implementation stays compliant while allowing beneficial enhancements.**
