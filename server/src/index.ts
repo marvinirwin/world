@@ -14,19 +14,30 @@ async function startServer() {
     const database = new Database();
     await database.initialize();
 
-    // Initialize services
-    const memoryService = new MemoryService(database);
-    const llmService = new LLMService(memoryService);
-    const commandHandler = new CommandHandler(database, llmService, memoryService);
-
-    // Initialize game engine
+    // Initialize game engine first
     const gameEngine = new GameEngine(database);
     
-    // Start WebSocket server with command handler
-    const wsServer = new GameWebSocketServer(config.WS_PORT, gameEngine, commandHandler);
+    // Initialize WebSocket server
+    const wsServer = new GameWebSocketServer(config.WS_PORT, gameEngine);
     
-    // Initialize game engine with websocket server's event processor
-    await gameEngine.initialize((event) => wsServer.processGameEngineEvent(event));
+    // Create error event handler that routes to websocket server
+    const onErrorEvent = async (event: any) => {
+      await wsServer.processGameEngineEvent(event);
+    };
+
+    // Initialize services with error handling
+    const memoryService = new MemoryService(database);
+    const llmService = new LLMService(memoryService);
+    const commandHandler = new CommandHandler(database, llmService, memoryService, onErrorEvent);
+    
+    // Set the command handler on the websocket server
+    wsServer.setCommandHandler(commandHandler);
+    
+    // Initialize game engine with websocket server's event processor and error handler
+    await gameEngine.initialize(
+      (event) => wsServer.processGameEngineEvent(event),
+      onErrorEvent
+    );
 
     // Graceful shutdown
     process.on('SIGINT', async () => {
@@ -39,7 +50,7 @@ async function startServer() {
 
     console.log(`Server running on WebSocket port ${config.WS_PORT}`);
     console.log('Press Ctrl+C to stop the server');
-    console.log('Cronjob system running - characters will check tasks every 2 seconds');
+    console.log('Cronjob system running - characters will check tasks every 30 seconds');
 
   } catch (error) {
     console.error('Failed to start server:', error);

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ScriptSelector from './ScriptSelector';
 import CharacterDeleter from './CharacterDeleter';
+import ItemGiver from './ItemGiver';
+import CronjobViewer from './CronjobViewer';
 import { 
   getAvailableScripts, 
   getSelectedScriptId, 
@@ -10,15 +12,19 @@ import {
   executeScript
 } from '../services/scriptService';
 import { TestScript } from '../scripts';
-import { GameState } from '../../../shared/types';
+import { GameState, CharacterCronjob } from '../../../shared/types';
 
 interface DevMenuProps {
   sendCommand: (instruction: string) => void;
+  sendCommandWithSource?: (command: string, source: 'manual' | 'script') => void;
   sendDevCommand?: (command: string, data: any) => void;
   gameState?: GameState | null;
+  cronjobs?: Record<string, CharacterCronjob[]>;
+  getCronjobs?: (characterId: string) => void;
+  entityId?: string | null;
 }
 
-const DevMenu: React.FC<DevMenuProps> = ({ sendCommand, sendDevCommand, gameState }) => {
+const DevMenu: React.FC<DevMenuProps> = ({ sendCommand, sendCommandWithSource, sendDevCommand, gameState, cronjobs, getCronjobs, entityId }) => {
   const [scripts] = useState<TestScript[]>(getAvailableScripts());
   const [selectedScriptId, setSelectedScriptIdState] = useState<string | null>(null);
 
@@ -36,8 +42,21 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand, sendDevCommand, gameStat
     if (!selectedScriptId) return;
     
     const script = getScriptById(selectedScriptId);
-    if (script) {
-      await executeScript(script, sendCommand);
+    if (script && sendCommandWithSource) {
+      await executeScript(
+        script, 
+        (command) => sendCommandWithSource(command, 'script'),
+        sendDevCommand,
+        () => entityId || null
+      );
+    } else if (script) {
+      // Fallback to regular sendCommand if sendCommandWithSource not available
+      await executeScript(
+        script, 
+        sendCommand,
+        sendDevCommand,
+        () => entityId || null
+      );
     }
   };
 
@@ -49,6 +68,13 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand, sendDevCommand, gameStat
   const handleDeleteCharacter = (characterId: string) => {
     if (sendDevCommand) {
       sendDevCommand('deleteCharacter', { characterId });
+    }
+  };
+
+  const handleGiveItem = (characterId: string, assetId: string) => {
+    console.log('DevMenu: Sending giveItem dev command', { characterId, assetId });
+    if (sendDevCommand) {
+      sendDevCommand('giveItem', { characterId, assetId });
     }
   };
 
@@ -104,9 +130,75 @@ const DevMenu: React.FC<DevMenuProps> = ({ sendCommand, sendDevCommand, gameStat
 
         {/* Character Management */}
         {sendDevCommand && gameState && (
-          <CharacterDeleter
+          <>
+            <CharacterDeleter
+              entities={gameState.entities}
+              onDeleteCharacter={handleDeleteCharacter}
+            />
+
+            <ItemGiver
+              entities={gameState.entities}
+              onGiveItem={handleGiveItem}
+            />
+          </>
+        )}
+
+        {/* Debug Actions */}
+        <div style={{
+          borderTop: '1px solid #333',
+          paddingTop: '8px',
+          marginTop: '12px',
+          marginBottom: '12px'
+        }}>
+          <div style={{
+            color: '#ff6600',
+            fontSize: '14px',
+            marginBottom: '8px',
+            fontWeight: 'bold'
+          }}>
+            Debug Actions:
+          </div>
+          
+          <button
+            onClick={() => sendCommand('DEBUG: trigger checkTasks manually')}
+            style={{
+              backgroundColor: '#ff6600',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              marginRight: '8px',
+              marginBottom: '4px'
+            }}
+          >
+            Manual CheckTasks
+          </button>
+          
+          <button
+            onClick={() => sendCommand('walk around every 10 seconds')}
+            style={{
+              backgroundColor: '#0066ff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              marginBottom: '4px'
+            }}
+          >
+            Test Recurring Command
+          </button>
+        </div>
+
+        {/* Cronjob Viewer */}
+        {gameState && cronjobs && getCronjobs && (
+          <CronjobViewer
             entities={gameState.entities}
-            onDeleteCharacter={handleDeleteCharacter}
+            cronjobs={cronjobs}
+            getCronjobs={getCronjobs}
           />
         )}
 

@@ -5,21 +5,42 @@ interface CommandInputProps {
   onSendCommand: (instruction: string) => void;
   recentEvents: GameEvent[];
   disabled?: boolean;
+  entityId?: string;
+  worldId?: string;
 }
 
 const CommandInput: React.FC<CommandInputProps> = ({ 
   onSendCommand, 
   recentEvents, 
-  disabled = false 
+  disabled = false,
+  entityId,
+  worldId
 }) => {
   const [instruction, setInstruction] = useState('');
   const [isVisible, setIsVisible] = useState(true);
+  const [localEvents, setLocalEvents] = useState<GameEvent[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const eventLogRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (instruction.trim() && !disabled) {
+      if (entityId && worldId) {
+        const localUserCommandEvent: GameEvent = {
+          id: `local-${Date.now()}`,
+          functionCall: 'userCommand',
+          parameters: {
+            entityId,
+            worldId,
+            command: instruction.trim(),
+            source: 'manual'
+          },
+          timestamp: new Date()
+        };
+        
+        setLocalEvents(prev => [localUserCommandEvent, ...prev.slice(0, 4)]);
+      }
+      
       onSendCommand(instruction.trim());
       setInstruction('');
     }
@@ -33,28 +54,24 @@ const CommandInput: React.FC<CommandInputProps> = ({
     }
   };
 
-  const formatEventMessage = (event: GameEvent): string => {
-    switch (event.functionCall) {
-      case 'move':
-        return `${event.parameters.entityId} moved to (${event.parameters.to?.x?.toFixed(1)}, ${event.parameters.to?.y?.toFixed(1)}, ${event.parameters.to?.z?.toFixed(1)})`;
-      case 'speak':
-        return `${event.parameters.entityId} says: "${event.parameters.message}"`;
-      case 'heard':
-        return `${event.parameters.entityId} heard ${event.parameters.speakerId}: "${event.parameters.message}"`;
-      case 'pickup':
-        return `${event.parameters.entityId} picked up ${event.parameters.itemId}`;
-      case 'drop':
-        return `${event.parameters.entityId} dropped ${event.parameters.itemId}`;
-      default:
-        return `${event.parameters.entityId}: ${event.functionCall}`;
-    }
-  };
-
   // Auto-scroll to bottom when new events arrive
   useEffect(() => {
     if (eventLogRef.current) {
       eventLogRef.current.scrollTop = eventLogRef.current.scrollHeight;
     }
+  }, [recentEvents]);
+
+  // Clean up local events when server confirms them
+  useEffect(() => {
+    setLocalEvents(prev => prev.filter(localEvent => {
+      // Keep local events that haven't been confirmed by server
+      const serverHasEvent = recentEvents.some(serverEvent => 
+        serverEvent.functionCall === 'userCommand' &&
+        serverEvent.parameters.command === localEvent.parameters.command &&
+        Math.abs(new Date(serverEvent.timestamp).getTime() - localEvent.timestamp.getTime()) < 10000 // Within 10 seconds
+      );
+      return !serverHasEvent;
+    }));
   }, [recentEvents]);
 
   // Focus input when component becomes visible
@@ -63,6 +80,116 @@ const CommandInput: React.FC<CommandInputProps> = ({
       inputRef.current.focus();
     }
   }, [isVisible]);
+
+  // Compress consecutive checkTasks events
+  const compressEvents = (events: GameEvent[]): GameEvent[] => {
+    if (events.length === 0) return events;
+    
+    const compressed: GameEvent[] = [];
+    let consecutiveCheckTasks = 0;
+    let lastCheckTasksEvent: GameEvent | null = null;
+    
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      
+      if (event.functionCall === 'checkTasks') {
+        consecutiveCheckTasks++;
+        lastCheckTasksEvent = event;
+      } else {
+        // If we had consecutive checkTasks events, add a compressed version
+        if (consecutiveCheckTasks > 1 && lastCheckTasksEvent) {
+          const compressedEvent: GameEvent = {
+            ...lastCheckTasksEvent,
+            id: `compressed-checktasks-${lastCheckTasksEvent.id}`,
+            parameters: {
+              ...lastCheckTasksEvent.parameters,
+              compressedCount: consecutiveCheckTasks
+            }
+          };
+          compressed.push(compressedEvent);
+        } else if (consecutiveCheckTasks === 1 && lastCheckTasksEvent) {
+          // Single checkTasks event, add it normally
+          compressed.push(lastCheckTasksEvent);
+        }
+        
+        // Reset counters and add the current non-checkTasks event
+        consecutiveCheckTasks = 0;
+        lastCheckTasksEvent = null;
+        compressed.push(event);
+      }
+    }
+    
+    // Handle case where events end with checkTasks
+    if (consecutiveCheckTasks > 1 && lastCheckTasksEvent) {
+      const compressedEvent: GameEvent = {
+        ...lastCheckTasksEvent,
+        id: `compressed-checktasks-${lastCheckTasksEvent.id}`,
+        parameters: {
+          ...lastCheckTasksEvent.parameters,
+          compressedCount: consecutiveCheckTasks
+        }
+      };
+      compressed.push(compressedEvent);
+    } else if (consecutiveCheckTasks === 1 && lastCheckTasksEvent) {
+      compressed.push(lastCheckTasksEvent);
+    }
+    
+    return compressed;
+  };
+
+  const formatEventMessage = (event: GameEvent): string => {
+    // Handle standard game events
+    if (!event.parameters) {
+      return `Unknown event: ${event.functionCall}`;
+    }
+
+    // Handle compressed checkTasks events
+    if (event.functionCall === 'checkTasks' && event.parameters.compressedCount) {
+      return `${event.parameters.entityId} checked tasks (${event.parameters.compressedCount} times)`;
+    }
+
+    switch (event.functionCall) {
+      case 'userCommand':
+        const sourcePrefix = event.parameters.source === 'script' ? '[SCRIPT] ' : '[YOU] ';
+        return `${sourcePrefix}${event.parameters.command}`;
+      case 'move':
+        const position = event.parameters.to || event.parameters.targetPosition;
+        if (position) {
+          return `${event.parameters.entityId} moved to (${position.x?.toFixed(1)}, ${position.y?.toFixed(1)}, ${position.z?.toFixed(1)})`;
+        } else {
+          return `${event.parameters.entityId} moved`;
+        }
+      case 'speak':
+        return `${event.parameters.entityId} says: "${event.parameters.message}"`;
+      case 'heard':
+        return `${event.parameters.entityId} heard ${event.parameters.speakerId}: "${event.parameters.message}"`;
+      case 'pickup':
+        return `${event.parameters.entityId} picked up ${event.parameters.itemId}`;
+      case 'drop':
+        return `${event.parameters.entityId} dropped ${event.parameters.itemId}`;
+      case 'checkTasks':
+        return `${event.parameters.entityId} checked tasks`;
+      default:
+        return `${event.parameters.entityId}: ${event.functionCall}`;
+    }
+  };
+
+  // Combine server events with local events, removing duplicates
+  const allEvents = [...recentEvents];
+  
+  // Add local events that haven't been confirmed by server yet
+  localEvents.forEach(localEvent => {
+    // Check if this local event has been confirmed by server
+    const serverHasEvent = recentEvents.some(serverEvent => 
+      serverEvent.functionCall === 'userCommand' &&
+      serverEvent.parameters.command === localEvent.parameters.command &&
+      Math.abs(new Date(serverEvent.timestamp).getTime() - localEvent.timestamp.getTime()) < 10000 // Within 10 seconds
+    );
+    
+    if (!serverHasEvent) {
+      allEvents.unshift(localEvent);
+    }
+  });
 
   if (!isVisible) {
     return (
@@ -126,29 +253,43 @@ const CommandInput: React.FC<CommandInputProps> = ({
         }}>
           Event Log
         </div>
-        {recentEvents.length === 0 ? (
+        {allEvents.length === 0 ? (
           <div style={{ color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic' }}>
             No events yet...
           </div>
         ) : (
-          recentEvents.slice().reverse().map((event, index) => (
-            <div
-              key={`${event.id}-${index}`}
-              style={{
-                marginBottom: '5px',
-                padding: '5px',
-                borderLeft: event.functionCall === 'speak' ? '3px solid #FF9800' : '3px solid #2196F3',
-                paddingLeft: '8px',
-                opacity: Math.max(0.3, 1 - (index * 0.05))
-              }}
-            >
-              <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px' }}>
-                {new Date(event.timestamp).toLocaleTimeString()}
-              </span>
-              <br />
-              {formatEventMessage(event)}
-            </div>
-          ))
+          compressEvents(allEvents).slice().reverse().map((event, index) => {
+            const getBorderColor = () => {
+              if (event.functionCall === 'userCommand') {
+                return event.parameters.source === 'script' 
+                  ? '3px solid #9C27B0' // Purple for script commands
+                  : '3px solid #4CAF50'; // Green for manual commands  
+              }
+              return event.functionCall === 'speak' ? '3px solid #FF9800' : '3px solid #2196F3';
+            };
+
+            // Make recent events brighter (higher opacity)
+            const opacity = 1.0; // Set consistent opacity for all events
+
+            return (
+              <div
+                key={`${event.id}-${index}`}
+                style={{
+                  marginBottom: '5px',
+                  padding: '5px',
+                  borderLeft: getBorderColor(),
+                  paddingLeft: '8px',
+                  opacity: opacity
+                }}
+              >
+                <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px' }}>
+                  {new Date(event.timestamp).toLocaleTimeString()}
+                </span>
+                <br />
+                {formatEventMessage(event)}
+              </div>
+            );
+          })
         )}
       </div>
 

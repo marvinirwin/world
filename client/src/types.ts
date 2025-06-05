@@ -1,2 +1,2 @@
-// Re-export all shared types for client use
+// Re-export all types from shared
 export * from '../../shared/types.js'; 

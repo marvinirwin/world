@@ -17,10 +17,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (entityId.trim()) {
-      // Save to localStorage
-      localStorage.setItem('worldEntityId', entityId.trim());
-      onLogin(entityId.trim());
+    const trimmedEntityId = entityId.trim();
+    console.log('DEBUG: LoginScreen handleSubmit called with entityId:', trimmedEntityId);
+    
+    if (trimmedEntityId) {
+      console.log('DEBUG: LoginScreen calling onLogin with:', trimmedEntityId);
+      onLogin(trimmedEntityId);
+    } else {
+      console.log('DEBUG: LoginScreen - empty entityId, not calling onLogin');
     }
   };
 

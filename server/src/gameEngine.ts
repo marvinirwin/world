@@ -21,8 +21,15 @@ export class GameEngine {
     };
   }
 
-  async initialize(eventProcessor?: (event: GameEvent) => Promise<void>): Promise<void> {
+  async initialize(
+    eventProcessor?: (event: GameEvent) => Promise<void>,
+    onErrorEvent?: (event: GameEvent) => Promise<void>
+  ): Promise<void> {
     this.eventProcessor = eventProcessor;
+    
+    // Reinitialize cronjob service with error handling
+    this.cronjobService = new CronjobService(this.database, onErrorEvent);
+    
     await this.loadGameState();
     
     // Start the periodic task checking system
@@ -107,14 +114,23 @@ export class GameEngine {
     return this.database;
   }
 
+  async removeEntityFromState(entityId: string): Promise<void> {
+    delete this.gameState.entities[entityId];
+    console.log(`Entity ${entityId} removed from game state`);
+  }
+
   async addEvent(event: GameEvent): Promise<void> {
+    console.log(`DEBUG: *** GameEngine.addEvent CALLED *** for event: ${event.functionCall}(${event.id})`);
+    console.log(`DEBUG: *** GameEngine.addEvent EVENT PARAMETERS ***:`, JSON.stringify(event.parameters, null, 2));
+    
     // Ensure event belongs to this world
     if (event.parameters.worldId !== this.worldId) {
-      console.warn(`Event for world ${event.parameters.worldId} ignored by engine for world ${this.worldId}`);
+      console.warn(`DEBUG: Event for world ${event.parameters.worldId} ignored by engine for world ${this.worldId}`);
       return;
     }
 
     // Save to database
+    console.log(`DEBUG: Saving event ${event.id} to database`);
     await this.database.saveEvent(event);
     
     // Add to recent events
@@ -122,9 +138,12 @@ export class GameEngine {
     if (this.gameState.recentEvents.length > 50) {
       this.gameState.recentEvents = this.gameState.recentEvents.slice(0, 50);
     }
+    console.log(`DEBUG: Event ${event.id} added to recent events (total: ${this.gameState.recentEvents.length})`);
 
     // Process event
+    console.log(`DEBUG: Processing event ${event.id} in game engine`);
     await this.processEvent(event);
+    console.log(`DEBUG: Event ${event.id} processed successfully`);
   }
 
   private async processEvent(event: GameEvent): Promise<void> {
@@ -144,10 +163,36 @@ export class GameEngine {
   }
 
   private async processMovementEvent(event: GameEvent): Promise<void> {
+    console.log(`DEBUG: *** GameEngine.processMovementEvent CALLED *** for event ${event.id}`);
+    console.log(`DEBUG: *** GameEngine.processMovementEvent PARAMETERS ***:`, JSON.stringify(event.parameters, null, 2));
+    
     const entity = this.gameState.entities[event.parameters.entityId];
-    if (!entity) return;
+    if (!entity) {
+      console.error(`DEBUG: *** CRITICAL ERROR *** Entity ${event.parameters.entityId} not found in game state`);
+      return;
+    }
 
     const { to } = event.parameters;
+    console.log(`DEBUG: *** GameEngine.processMovementEvent EXTRACTED 'to' ***:`, to);
+    
+    if (!to) {
+      console.error(`DEBUG: *** CRITICAL ERROR *** Move event ${event.id} missing 'to' parameter. Available parameters:`, Object.keys(event.parameters));
+      return;
+    }
+    
+    // Validate to position has required properties
+    if (typeof to !== 'object' || to === null) {
+      console.error(`DEBUG: *** CRITICAL ERROR *** Move event ${event.id} 'to' parameter is not an object:`, to);
+      return;
+    }
+    
+    if (typeof to.x !== 'number' || typeof to.y !== 'number' || typeof to.z !== 'number') {
+      console.error(`DEBUG: *** CRITICAL ERROR *** Move event ${event.id} 'to' parameter missing valid x/y/z coordinates:`, to);
+      return;
+    }
+
+    console.log(`DEBUG: *** GameEngine.processMovementEvent SUCCESS *** Processing move event ${event.id} for entity ${event.parameters.entityId} to position (${to.x}, ${to.y}, ${to.z})`);
+    
     entity.position = to;
     await this.database.updateEntityPosition(event.parameters.entityId, to);
   }

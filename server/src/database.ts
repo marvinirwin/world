@@ -269,9 +269,20 @@ Then restart the server.
     if (result.rows.length === 0) return null;
     
     const row = result.rows[0];
+    console.log(`DEBUG: Loading entity ${id} from database:`, {
+      position_x: row.position_x,
+      position_y: row.position_y,
+      position_z: row.position_z,
+      position_types: {
+        x: typeof row.position_x,
+        y: typeof row.position_y,
+        z: typeof row.position_z
+      }
+    });
+    
     const itemInstances = await this.getEntityItemInstances(id);
     
-    return {
+    const entity = {
       id: row.id,
       name: row.name,
       worldId: row.world_id,
@@ -283,6 +294,9 @@ Then restart the server.
       bodyParts: row.body_parts || [],
       itemInstances: itemInstances
     };
+    
+    console.log(`DEBUG: Returning entity ${id} with position:`, entity.position);
+    return entity;
   }
 
   async getEntitiesByWorld(worldId: string): Promise<Entity[]> {
@@ -291,10 +305,23 @@ Then restart the server.
       [worldId]
     );
     
+    console.log(`DEBUG: Loading ${result.rows.length} entities from database for world ${worldId}`);
+    
     const entities = await Promise.all(result.rows.map(async row => {
+      console.log(`DEBUG: Processing entity ${row.id} with positions:`, {
+        position_x: row.position_x,
+        position_y: row.position_y,
+        position_z: row.position_z,
+        types: {
+          x: typeof row.position_x,
+          y: typeof row.position_y,
+          z: typeof row.position_z
+        }
+      });
+      
       const itemInstances = await this.getEntityItemInstances(row.id);
       
-      return {
+      const entity = {
         id: row.id,
         name: row.name,
         worldId: row.world_id,
@@ -306,8 +333,12 @@ Then restart the server.
         bodyParts: row.body_parts || [],
         itemInstances: itemInstances
       };
+      
+      console.log(`DEBUG: Entity ${row.id} final position:`, entity.position);
+      return entity;
     }));
     
+    console.log(`DEBUG: Returning ${entities.length} entities to game engine`);
     return entities;
   }
 
@@ -420,13 +451,38 @@ Then restart the server.
   }
 
   async saveEvent(event: GameEvent): Promise<void> {
+    console.log(`DEBUG: *** saveEvent CALLED *** for event: ${event.functionCall}(${event.id})`);
+    console.log(`DEBUG: *** saveEvent EVENT DATA ***:`);
+    console.log(`  - id: ${event.id}`);
+    console.log(`  - functionCall: ${event.functionCall}`);
+    console.log(`  - parameters:`, JSON.stringify(event.parameters, null, 2));
+    console.log(`  - timestamp: ${event.timestamp}`);
+    
+    if (event.functionCall === 'move') {
+      console.log(`DEBUG: *** saveEvent MOVE EVENT ANALYSIS ***:`);
+      console.log(`  - entityId: ${event.parameters.entityId}`);
+      console.log(`  - worldId: ${event.parameters.worldId}`);
+      console.log(`  - from: ${JSON.stringify(event.parameters.from)}`);
+      console.log(`  - to: ${JSON.stringify(event.parameters.to)}`);
+      console.log(`  - duration: ${event.parameters.duration}`);
+      console.log(`  - targetPosition: ${JSON.stringify(event.parameters.targetPosition)}`);
+      console.log(`  - parameters keys: [${Object.keys(event.parameters).join(', ')}]`);
+    }
+    
+    const jsonStringifiedParameters = JSON.stringify(event.parameters);
+    console.log(`DEBUG: *** saveEvent JSON.stringify(parameters) ***:`, jsonStringifiedParameters);
+    
     await this.pool.query(
       'INSERT INTO events (id, function_call, parameters, timestamp) VALUES ($1, $2, $3, $4)',
-      [event.id, event.functionCall, JSON.stringify(event.parameters), event.timestamp]
+      [event.id, event.functionCall, jsonStringifiedParameters, event.timestamp]
     );
+    
+    console.log(`DEBUG: *** saveEvent COMPLETED *** Event ${event.id} saved to database`);
   }
 
   async getRecentEvents(worldId: string, limit: number = 10): Promise<GameEvent[]> {
+    console.log(`DEBUG: *** getRecentEvents CALLED *** for worldId: ${worldId}, limit: ${limit}`);
+    
     const result = await this.pool.query(
       `SELECT * FROM events 
        WHERE parameters->>'worldId' = $1 
@@ -434,12 +490,43 @@ Then restart the server.
       [worldId, limit]
     );
     
-    return result.rows.map(row => ({
-      id: row.id,
-      functionCall: row.function_call,
-      parameters: row.parameters,
-      timestamp: row.timestamp
-    }));
+    console.log(`DEBUG: *** getRecentEvents QUERY RESULT *** Found ${result.rows.length} events`);
+    
+    const events = result.rows.map((row, index) => {
+      console.log(`DEBUG: *** RAW DATABASE ROW ${index + 1} ***:`);
+      console.log(`  - id: ${row.id}`);
+      console.log(`  - function_call: ${row.function_call}`);
+      console.log(`  - parameters (raw):`, row.parameters);
+      console.log(`  - parameters type:`, typeof row.parameters);
+      console.log(`  - timestamp: ${row.timestamp}`);
+      
+      const event = {
+        id: row.id,
+        functionCall: row.function_call,
+        parameters: row.parameters,
+        timestamp: row.timestamp
+      };
+      
+      console.log(`DEBUG: *** PROCESSED EVENT ${index + 1} ***:`);
+      console.log(`  - functionCall: ${event.functionCall}`);
+      console.log(`  - parameters:`, JSON.stringify(event.parameters, null, 2));
+      
+      if (event.functionCall === 'move') {
+        console.log(`DEBUG: *** MOVE EVENT ANALYSIS ${index + 1} ***:`);
+        console.log(`  - entityId: ${event.parameters.entityId}`);
+        console.log(`  - worldId: ${event.parameters.worldId}`);
+        console.log(`  - from: ${JSON.stringify(event.parameters.from)}`);
+        console.log(`  - to: ${JSON.stringify(event.parameters.to)}`);
+        console.log(`  - duration: ${event.parameters.duration}`);
+        console.log(`  - targetPosition: ${JSON.stringify(event.parameters.targetPosition)}`);
+        console.log(`  - parameters keys: [${Object.keys(event.parameters).join(', ')}]`);
+      }
+      
+      return event;
+    });
+    
+    console.log(`DEBUG: *** getRecentEvents RETURNING *** ${events.length} processed events`);
+    return events;
   }
 
   async saveMemory(memory: CharacterMemory): Promise<void> {

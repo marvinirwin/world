@@ -21,7 +21,8 @@ This game has an extremely simple, organized architecture designed for easy modi
   ├── services/
   │   ├── memoryService.ts # Character memory compilation & retrieval
   │   ├── llmService.ts    # Gemini AI integration
-  │   └── cronjobService.ts # Character task scheduling
+  │   ├── cronjobService.ts # Character task scheduling
+  │   └── errorService.ts  # Character error event creation
   ├── commandHandler.ts    # Command processing coordination
   ├── websocketServer.ts   # Real-time client communication
   ├── gameEngine.ts        # Core game logic coordination
@@ -33,12 +34,64 @@ This game has an extremely simple, organized architecture designed for easy modi
   │   ├── assetService.ts        # 3D model/texture loading with body parts
   │   └── localStorageService.ts # Character ID persistence
   ├── components/          # React UI components with 3D rendering
-  │   └── World3D.tsx      # Entity and item instance rendering
+  │   ├── World3D.tsx      # Entity and item instance rendering
+  │   └── ErrorDisplay.tsx # Character-specific error display
   ├── renderers/           # 3D world display (to be created)
   └── utils/               # Helper functions (to be created)
 
 /client/assets/            # 3D models, textures, sounds
 ```
+
+## Character Error Handling System
+
+The game includes a comprehensive error handling system that captures and displays character-specific errors in real-time:
+
+### Error Event Structure
+```typescript
+{
+  functionCall: "characterError",
+  parameters: {
+    entityId: string,           // Character that experienced the error
+    worldId: string,
+    errorMessage: string,       // Human-readable error description
+    errorType: 'command' | 'event' | 'cronjob' | 'pickup' | 'drop' | 'move' | 'speak' | 'system',
+    originalCommand?: string,   // Original command that caused the error
+    stackTrace?: string,        // Technical stack trace for debugging
+    severity: 'low' | 'medium' | 'high'  // Error severity level
+  }
+}
+```
+
+### Error Types and Scenarios
+- **command**: Failed to process user commands or LLM decisions
+- **event**: Error during event handler execution
+- **cronjob**: Scheduled task execution failures
+- **pickup/drop/move/speak**: Specific action failures
+- **system**: Database or service-level errors
+
+### Error Flow Process
+1. **Error Occurs**: Any error in command processing, event handling, or cronjobs
+2. **Error Service**: Creates standardized CharacterErrorEvent with context
+3. **WebSocket Routing**: Error sent specifically to client controlling affected character
+4. **Client Display**: Error appears at top of screen with visual indicators
+5. **Auto-Dismiss**: Errors automatically disappear based on severity (3-8 seconds)
+6. **Memory Creation**: Errors are saved to character memories for context
+
+### Error Display Features
+- **Visual Indicators**: Color-coded by severity (orange/red) with type icons
+- **Contextual Information**: Shows original command and error type
+- **Auto-Dismiss**: Low severity (3s), Medium (5s), High (8s)
+- **Manual Dismiss**: Users can click X to dismiss early
+- **Multiple Errors**: Up to 5 errors shown simultaneously
+- **Character-Specific**: Only shown to clients controlling the affected character
+
+### Error Service Integration
+The ErrorService provides utility methods for creating consistent error events:
+- `createCharacterError()`: Generates standardized error events
+- `getDisplayMessage()`: Human-readable error descriptions
+- `getSeverityColor()`: UI color coding for different severities
+
+This system ensures that players are immediately aware when their character encounters problems, with clear context about what went wrong and what command caused the issue.
 
 ## Item Instance System
 

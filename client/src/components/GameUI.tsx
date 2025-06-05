@@ -63,7 +63,7 @@ const GameUI: React.FC<GameUIProps> = ({ gameState, connected, error, playerEnti
       )}
 
       {/* Player Info */}
-      {gameState && gameState.entities[playerEntityId] && (
+      {gameState && gameState.entities[playerEntityId] && gameState.entities[playerEntityId].position && (
         <div style={{
           position: 'absolute',
           top: '20px',

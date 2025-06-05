@@ -1,7 +1,7 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text, Box } from '@react-three/drei';
-import { Entity, GameState, GameEvent, SpeechEvent, ItemInstance } from '../types';
+import { Entity, GameState, GameEvent, SpeechEvent, ItemInstance, MovementEvent, Position } from '../types';
 import SpeechBubble from './SpeechBubble';
 import * as THREE from 'three';
 
@@ -12,6 +12,105 @@ interface SpeechBubbleData {
   position: [number, number, number];
   timestamp: number;
 }
+
+interface MovementAnimation {
+  entityId: string;
+  from: Position;
+  to: Position;
+  startTime: number;
+  duration: number;
+  isActive: boolean;
+}
+
+interface PlayerFollowCameraProps {
+  playerPosition: Position;
+  playerEntityId: string;
+  movementAnimations: Map<string, MovementAnimation>;
+}
+
+const PlayerFollowCamera: React.FC<PlayerFollowCameraProps> = ({ 
+  playerPosition, 
+  playerEntityId, 
+  movementAnimations 
+}) => {
+  const { camera } = useThree();
+  const [currentPlayerPosition, setCurrentPlayerPosition] = useState<Position>(playerPosition);
+
+  // Update player position if there's an active movement animation
+  useFrame(() => {
+    const playerAnimation = movementAnimations.get(playerEntityId);
+    let targetPosition = playerPosition;
+
+    if (playerAnimation && playerAnimation.isActive) {
+      const elapsed = Date.now() - playerAnimation.startTime;
+      const progress = Math.min(elapsed / playerAnimation.duration, 1);
+      const easedProgress = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+      
+      targetPosition = {
+        x: playerAnimation.from.x + (playerAnimation.to.x - playerAnimation.from.x) * easedProgress,
+        y: playerAnimation.from.y + (playerAnimation.to.y - playerAnimation.from.y) * easedProgress,
+        z: playerAnimation.from.z + (playerAnimation.to.z - playerAnimation.from.z) * easedProgress
+      };
+    }
+
+    setCurrentPlayerPosition(targetPosition);
+  });
+
+  return null;
+};
+
+interface PlayerTrackingControlsProps {
+  playerPosition: Position;
+  playerEntityId: string;
+  movementAnimations: Map<string, MovementAnimation>;
+}
+
+const PlayerTrackingControls: React.FC<PlayerTrackingControlsProps> = ({
+  playerPosition,
+  playerEntityId,
+  movementAnimations
+}) => {
+  const controlsRef = useRef<any>(null);
+
+  // Update OrbitControls target to follow player
+  useFrame(() => {
+    if (controlsRef.current) {
+      const playerAnimation = movementAnimations.get(playerEntityId);
+      let targetPosition = playerPosition;
+
+      if (playerAnimation && playerAnimation.isActive) {
+        const elapsed = Date.now() - playerAnimation.startTime;
+        const progress = Math.min(elapsed / playerAnimation.duration, 1);
+        const easedProgress = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+        
+        targetPosition = {
+          x: playerAnimation.from.x + (playerAnimation.to.x - playerAnimation.from.x) * easedProgress,
+          y: playerAnimation.from.y + (playerAnimation.to.y - playerAnimation.from.y) * easedProgress,
+          z: playerAnimation.from.z + (playerAnimation.to.z - playerAnimation.from.z) * easedProgress
+        };
+      }
+
+      // Smoothly update the target that the camera orbits around
+      controlsRef.current.target.lerp(
+        new THREE.Vector3(targetPosition.x, targetPosition.y + 1, targetPosition.z),
+        0.1
+      );
+      controlsRef.current.update();
+    }
+  });
+
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      enablePan={false} // Disable panning to keep focus on player
+      enableZoom={true}
+      enableRotate={true}
+      minDistance={3}
+      maxDistance={25}
+      target={[playerPosition.x, playerPosition.y + 1, playerPosition.z]}
+    />
+  );
+};
 
 interface ItemMeshProps {
   itemInstance: ItemInstance;
@@ -104,13 +203,67 @@ const BodyPartMesh: React.FC<BodyPartMeshProps> = ({ bodyPart, entityPosition })
 interface EntityMeshProps {
   entity: Entity;
   isPlayer: boolean;
+  movementAnimation?: MovementAnimation;
 }
 
-const EntityMesh: React.FC<EntityMeshProps> = ({ entity, isPlayer }) => {
+const EntityMesh: React.FC<EntityMeshProps> = ({ entity, isPlayer, movementAnimation }) => {
+  const [currentPosition, setCurrentPosition] = useState<Position>(entity.position);
+  
+  // Animate movement if there's an active animation
+  useFrame(() => {
+    if (movementAnimation && movementAnimation.isActive) {
+      // Validate animation positions before using them
+      if (!movementAnimation.from || !movementAnimation.to) {
+        console.error('Movement animation has undefined positions:', {
+          from: movementAnimation.from,
+          to: movementAnimation.to,
+          entityId: entity.id
+        });
+        // Fallback to entity position
+        setCurrentPosition(entity.position);
+        return;
+      }
+      
+      // Validate position properties
+      if (typeof movementAnimation.from.x !== 'number' || 
+          typeof movementAnimation.from.y !== 'number' || 
+          typeof movementAnimation.from.z !== 'number' ||
+          typeof movementAnimation.to.x !== 'number' || 
+          typeof movementAnimation.to.y !== 'number' || 
+          typeof movementAnimation.to.z !== 'number') {
+        console.error('Movement animation has invalid position coordinates:', {
+          from: movementAnimation.from,
+          to: movementAnimation.to,
+          entityId: entity.id
+        });
+        // Fallback to entity position
+        setCurrentPosition(entity.position);
+        return;
+      }
+      
+      const elapsed = Date.now() - movementAnimation.startTime;
+      const progress = Math.min(elapsed / movementAnimation.duration, 1);
+      
+      // Use eased interpolation for smoother movement
+      const easedProgress = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+      
+      const interpolatedPosition: Position = {
+        x: movementAnimation.from.x + (movementAnimation.to.x - movementAnimation.from.x) * easedProgress,
+        y: movementAnimation.from.y + (movementAnimation.to.y - movementAnimation.from.y) * easedProgress,
+        z: movementAnimation.from.z + (movementAnimation.to.z - movementAnimation.from.z) * easedProgress
+      };
+      
+      setCurrentPosition(interpolatedPosition);
+    } else {
+      // No animation, use entity position directly
+      setCurrentPosition(entity.position);
+    }
+  });
+
   const entityPosition: [number, number, number] = [
-    entity.position.x,
-    entity.position.y,
-    entity.position.z
+    currentPosition.x,
+    currentPosition.y,
+    currentPosition.z
   ];
 
   return (
@@ -153,17 +306,28 @@ interface World3DProps {
 }
 
 const World3D: React.FC<World3DProps> = ({ gameState, playerEntityId }) => {
-  const entities = Object.values(gameState.entities);
+  const entities = Object.values(gameState.entities || {});
   const [speechBubbles, setSpeechBubbles] = useState<SpeechBubbleData[]>([]);
+  const [movementAnimations, setMovementAnimations] = useState<Map<string, MovementAnimation>>(new Map());
+  const [processedEvents, setProcessedEvents] = useState<Set<string>>(new Set());
 
-  // Monitor events for speech
+  // Get the player entity
+  const playerEntity = gameState.entities?.[playerEntityId];
+  const playerPosition = playerEntity?.position || { x: 0, y: 0, z: 0 };
+
+  // Monitor events for speech and movement
   useEffect(() => {
     const latestEvents = gameState.recentEvents.slice(0, 5); // Check last 5 events
     
     latestEvents.forEach(event => {
+      // Skip if we've already processed this event
+      if (processedEvents.has(event.id)) {
+        return;
+      }
+
       if (event.functionCall === 'speak') {
         const speakEvent = event as SpeechEvent;
-        const entity = gameState.entities[speakEvent.parameters.entityId];
+        const entity = gameState.entities?.[speakEvent.parameters.entityId];
         
         if (entity) {
           const bubbleId = `${speakEvent.id}-${Date.now()}`;
@@ -185,9 +349,87 @@ const World3D: React.FC<World3DProps> = ({ gameState, playerEntityId }) => {
             return [...filtered, newBubble];
           });
         }
+      } else if (event.functionCall === 'move') {
+        const moveEvent = event as MovementEvent;
+        if (!moveEvent.parameters.from || !moveEvent.parameters.to) {
+          console.error('Move event has undefined positions:', {
+            from: moveEvent.parameters.from,
+            to: moveEvent.parameters.to,
+            eventId: moveEvent.id,
+            entityId: moveEvent.parameters.entityId
+          });
+          return;
+        }
+        
+        // Validate position coordinates
+        if (typeof moveEvent.parameters.from.x !== 'number' || 
+            typeof moveEvent.parameters.from.y !== 'number' || 
+            typeof moveEvent.parameters.from.z !== 'number' ||
+            typeof moveEvent.parameters.to.x !== 'number' || 
+            typeof moveEvent.parameters.to.y !== 'number' || 
+            typeof moveEvent.parameters.to.z !== 'number') {
+          console.error('Move event has invalid position coordinates:', {
+            from: moveEvent.parameters.from,
+            to: moveEvent.parameters.to,
+            eventId: moveEvent.id,
+            entityId: moveEvent.parameters.entityId
+          });
+          return;
+        }
+        
+        const animation: MovementAnimation = {
+          entityId: moveEvent.parameters.entityId,
+          from: moveEvent.parameters.from,
+          to: moveEvent.parameters.to,
+          startTime: Date.now(),
+          duration: moveEvent.parameters.duration,
+          isActive: true
+        };
+
+        setMovementAnimations(prev => {
+          const newAnimations = new Map(prev);
+          // Replace any existing animation for this entity
+          newAnimations.set(moveEvent.parameters.entityId, animation);
+          return newAnimations;
+        });
       }
+
+      // Mark this event as processed
+      setProcessedEvents(prev => new Set([...prev, event.id]));
     });
-  }, [gameState.recentEvents, gameState.entities]);
+  }, [gameState.recentEvents, gameState.entities, processedEvents]);
+
+  // Clean up completed animations
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMovementAnimations(prev => {
+        const newAnimations = new Map(prev);
+        let hasChanges = false;
+
+        for (const [entityId, animation] of newAnimations.entries()) {
+          const elapsed = Date.now() - animation.startTime;
+          if (elapsed >= animation.duration) {
+            newAnimations.delete(entityId);
+            hasChanges = true;
+          }
+        }
+
+        return hasChanges ? newAnimations : prev;
+      });
+
+      // Clean up old processed events to prevent memory leaks
+      // Keep only events that might still be in recentEvents
+      setProcessedEvents(prev => {
+        const currentEventIds = new Set(gameState.recentEvents.map(event => event.id));
+        const filteredEvents = new Set([...prev].filter(eventId => currentEventIds.has(eventId)));
+        
+        // Only update if there are changes
+        return filteredEvents.size !== prev.size ? filteredEvents : prev;
+      });
+    }, 100); // Check every 100ms for completed animations
+
+    return () => clearInterval(interval);
+  }, [gameState.recentEvents]);
 
   const handleSpeechBubbleComplete = (bubbleId: string) => {
     setSpeechBubbles(prev => prev.filter(bubble => bubble.id !== bubbleId));
@@ -195,7 +437,10 @@ const World3D: React.FC<World3DProps> = ({ gameState, playerEntityId }) => {
 
   return (
     <Canvas
-      camera={{ position: [10, 10, 10], fov: 60 }}
+      camera={{ 
+        position: [playerPosition.x + 10, playerPosition.y + 8, playerPosition.z + 10], 
+        fov: 60 
+      }}
       style={{ width: '100%', height: '100%' }}
     >
       <ambientLight intensity={0.6} />
@@ -216,6 +461,7 @@ const World3D: React.FC<World3DProps> = ({ gameState, playerEntityId }) => {
           key={entity.id}
           entity={entity}
           isPlayer={entity.id === playerEntityId}
+          movementAnimation={movementAnimations.get(entity.id)}
         />
       ))}
 
@@ -230,12 +476,10 @@ const World3D: React.FC<World3DProps> = ({ gameState, playerEntityId }) => {
         />
       ))}
 
-      <OrbitControls
-        enablePan={true}
-        enableZoom={true}
-        enableRotate={true}
-        minDistance={5}
-        maxDistance={50}
+      <PlayerTrackingControls
+        playerPosition={playerPosition}
+        playerEntityId={playerEntityId}
+        movementAnimations={movementAnimations}
       />
     </Canvas>
   );

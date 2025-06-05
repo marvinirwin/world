@@ -16,22 +16,41 @@ export class LLMService {
     userCommand: string,
     gameState: GameState
   ): Promise<LLMDecision | null> {
+    console.log(`DEBUG: LLMService.generateDecision called for character ${characterId} with command: "${userCommand}"`);
+    
+    // Special debug command to force checkTasks
+    if (userCommand.includes('DEBUG: trigger checkTasks')) {
+      console.log(`DEBUG: Forcing checkTasks decision for debug command`);
+      return {
+        functionCall: 'checkTasks',
+        parameters: {
+          triggeredBy: 'debug'
+        },
+        reasoning: 'Manually triggered checkTasks for debugging purposes'
+      };
+    }
+    
     try {
       const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
       
       // Get character's memories for context
+      console.log(`DEBUG: Getting memories for character ${characterId}`);
       const memories = await this.memoryService.getRelevantMemories(
         characterId,
         worldId,
         userCommand
       );
+      console.log(`DEBUG: Retrieved ${memories.length} memories for context`);
       const memoryContext = await this.memoryService.formatMemoriesForLLM(memories);
 
       // Get character info
       const character = gameState.entities[characterId];
       if (!character) {
+        console.error(`DEBUG: Character ${characterId} not found in game state`);
         throw new Error(`Character ${characterId} not found in game state`);
       }
+
+      console.log(`DEBUG: Character found: ${character.name} at position (${character.position.x}, ${character.position.y}, ${character.position.z})`);
 
       const prompt = `
 You are an AI character in a virtual world simulation. You have your own personality, memories, and decision-making autonomy.
@@ -87,27 +106,37 @@ Examples:
 Choose your action:
 `;
 
+      console.log(`DEBUG: Sending prompt to Gemini LLM (${prompt.length} characters)`);
       const result = await model.generateContent(prompt);
       const response = result.response.text().trim();
+      console.log(`DEBUG: Gemini response received (${response.length} characters):`, response);
       
       // Extract JSON from response
       const jsonMatch = response.match(/\{.*\}/s);
       if (!jsonMatch) {
-        console.warn('No valid JSON found in LLM response:', response);
+        console.warn('DEBUG: No valid JSON found in LLM response:', response);
         return null;
       }
 
       const decision = JSON.parse(jsonMatch[0]) as LLMDecision;
+      console.log(`DEBUG: Parsed decision:`, decision);
+      
+      // Debug logging for move decisions
+      if (decision.functionCall === 'move') {
+        console.log('DEBUG: LLM Move Decision:', JSON.stringify(decision, null, 2));
+        console.log('DEBUG: Raw LLM Response:', response);
+      }
       
       // Validate decision
       if (!decision.functionCall || !decision.parameters) {
-        console.warn('Invalid decision generated:', decision);
+        console.warn('DEBUG: Invalid decision generated:', decision);
         return null;
       }
 
+      console.log(`DEBUG: LLMService.generateDecision returning valid decision: ${decision.functionCall}`);
       return decision;
     } catch (error) {
-      console.error('Error generating decision:', error);
+      console.error('DEBUG: Error generating decision:', error);
       return null;
     }
   }
@@ -145,6 +174,8 @@ Generate a personality for ${characterName}:
     characterId: string,
     worldId: string
   ): Promise<LLMDecision | null> {
+    console.log(`DEBUG: LLMService.getDecision called for character ${characterId} in world ${worldId}`);
+    
     try {
       const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
       
@@ -167,27 +198,40 @@ Examples:
 
 Choose your action:`;
 
+      console.log(`DEBUG: Sending prompt to Gemini LLM for checkTasks (${fullPrompt.length} characters)`);
+      console.log(`DEBUG: Full prompt content:`, fullPrompt);
+      
       const result = await model.generateContent(fullPrompt);
       const response = result.response.text().trim();
+      
+      console.log(`DEBUG: Gemini response received for checkTasks (${response.length} characters):`, response);
       
       // Extract JSON from response
       const jsonMatch = response.match(/\{.*\}/s);
       if (!jsonMatch) {
-        console.warn('No valid JSON found in LLM response:', response);
+        console.warn('DEBUG: No valid JSON found in LLM response for checkTasks:', response);
         return null;
       }
 
       const decision = JSON.parse(jsonMatch[0]) as LLMDecision;
+      console.log(`DEBUG: Parsed checkTasks decision:`, decision);
+      
+      // Debug logging for move decisions
+      if (decision.functionCall === 'move') {
+        console.log('DEBUG: LLM Move Decision (getDecision):', JSON.stringify(decision, null, 2));
+        console.log('DEBUG: Raw LLM Response (getDecision):', response);
+      }
       
       // Validate decision
       if (!decision.functionCall || !decision.parameters) {
-        console.warn('Invalid decision generated:', decision);
+        console.warn('DEBUG: Invalid decision generated for checkTasks:', decision);
         return null;
       }
 
+      console.log(`DEBUG: LLMService.getDecision returning valid decision: ${decision.functionCall}`);
       return decision;
     } catch (error) {
-      console.error('Error getting decision:', error);
+      console.error('DEBUG: Error getting checkTasks decision:', error);
       return null;
     }
   }

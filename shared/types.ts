@@ -123,6 +123,29 @@ export interface CheckTasksEvent extends GameEvent {
   };
 }
 
+export interface CharacterErrorEvent extends GameEvent {
+  functionCall: 'characterError';
+  parameters: {
+    entityId: string;
+    worldId: string;
+    errorMessage: string;
+    errorType: 'command' | 'event' | 'cronjob' | 'pickup' | 'drop' | 'move' | 'speak' | 'system';
+    originalCommand?: string;
+    stackTrace?: string;
+    severity: 'low' | 'medium' | 'high';
+  };
+}
+
+export interface UserCommandEvent extends GameEvent {
+  functionCall: 'userCommand';
+  parameters: {
+    entityId: string;
+    worldId: string;
+    command: string;
+    source: 'manual' | 'script';
+  };
+}
+
 export interface GameState {
   worldId: string;
   entities: Record<string, Entity>;
@@ -138,13 +161,13 @@ export interface LLMDecision {
 }
 
 export interface ClientMessage {
-  type: 'join' | 'command' | 'devCommand';
+  type: 'join' | 'command' | 'devCommand' | 'getCronjobs';
   entityId?: string;
   worldId?: string;
   data?: any;
 }
 
 export interface ServerMessage {
-  type: 'gameState' | 'event' | 'error';
+  type: 'gameState' | 'event' | 'error' | 'characterError' | 'cronjobs';
   data: any;
 } 
